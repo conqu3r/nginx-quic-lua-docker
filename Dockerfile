@@ -68,8 +68,11 @@ RUN cd nginx-quic && \
 FROM nginx
 
 # 安装运行所需的软件包和 Lua 模块
-RUN apt-get update --fix-missing && apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks lua-cjson&& \
-    luarocks install lua-sqlite3 lua-resty-lrucache && \
+RUN apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
+    libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks lua-cjson && \
+    luarocks install lua-sqlite3 && \
+    luarocks install lua-resty-lrucache && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段中复制生成的二进制文件
