@@ -1,18 +1,24 @@
+# 构建阶段
 FROM nginx AS build
 
 WORKDIR /src
-RUN apt-get update && apt-get install -y git gcc make autoconf libtool perl libssl-dev && \
-    apt-get install -y mercurial libperl-dev libpcre3-dev zlib1g-dev libxslt1-dev libgd-ocaml-dev libgeoip-dev luajit libluajit-5.1-dev
-ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
-ENV LUAJIT_INC=/usr/include/luajit-2.1
 
+# 安装编译所需的软件包
+RUN apt-get update && apt-get install -y git gcc make autoconf libtool perl libssl-dev \
+    mercurial libperl-dev libpcre3-dev zlib1g-dev libxslt1-dev libgd-ocaml-dev libgeoip-dev luajit libluajit-5.1-dev
+
+# 下载并安装 Lua 模块和 ngx-devel-kit
 RUN git -c http.sslVerify=false clone https://github.com/openresty/lua-nginx-module && \
     git -c http.sslVerify=false clone https://github.com/vision5/ngx_devel_kit && \
-    git -c http.sslVerify=false clone https://github.com/openresty/lua-resty-core
+    git -c http.sslVerify=false clone https://github.com/openresty/lua-resty-core 
 
-RUN export VERBOSE=1 && \
-    hg clone -b quic https://hg.nginx.org/nginx-quic && \
+# 下载 nginx-quic 源码并打补丁
+RUN hg clone -b quic https://hg.nginx.org/nginx-quic && \
     cd nginx-quic && \
+    curl https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.0.10-log_escape_non_ascii.patch | patch -p1
+
+# 编译 nginx-quic
+RUN cd nginx-quic && \
     auto/configure \
       --sbin-path=/usr/sbin/nginx \
       --modules-path=/usr/lib/nginx/modules \
@@ -56,15 +62,25 @@ RUN export VERBOSE=1 && \
       --with-cc-opt="-Wno-error" && \
     make
 
+# 最终阶段
 FROM nginx
+
+# 安装运行所需的软件包和 Lua 模块
+RUN apt-get update --fix-missing && apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks && \
+    luarocks install lua-sqlite3 && luarocks install lua-resty-lrucache && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 从构建阶段中复制生成的二进制文件
 COPY --from=build /src/nginx-quic/objs/nginx /usr/sbin
-RUN apt-get update --fix-missing && \
-    apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks && \
-    luarocks install lua-sqlite3 && \
-    luarocks install lua-resty-lrucache && \
-    apt-get clean
+
+# 从构建阶段中复制 Lua 模块
 COPY --from=build /src/lua-resty-core/lib /usr/local/share/lua/5.1
 
-CMD ["/usr/sbin/nginx", "-g", "daemon off;", "-c", "/etc/nginx/nginx.conf"]
+# 复制 nginx 配置文件
+#COPY nginx.conf /etc/nginx/nginx.conf
 
+# 设置启动命令
+CMD ["nginx", "-g", "daemon off;"]
+
+# 设置信号
 STOPSIGNAL SIGQUIT
