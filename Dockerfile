@@ -12,6 +12,10 @@ RUN git -c http.sslVerify=false clone https://github.com/openresty/lua-nginx-mod
     git -c http.sslVerify=false clone https://github.com/vision5/ngx_devel_kit && \
     git -c http.sslVerify=false clone https://github.com/openresty/lua-resty-core 
 
+ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
+ENV LUAJIT_INC=/usr/include/luajit-2.1
+ENV VERBOSE=1
+
 # 下载 nginx-quic 源码并打补丁
 RUN hg clone -b quic https://hg.nginx.org/nginx-quic && \
     cd nginx-quic && \
@@ -19,7 +23,6 @@ RUN hg clone -b quic https://hg.nginx.org/nginx-quic && \
 
 # 编译 nginx-quic
 RUN cd nginx-quic && \
-    export VERBOSE=1 && \
     auto/configure \
       --sbin-path=/usr/sbin/nginx \
       --modules-path=/usr/lib/nginx/modules \
