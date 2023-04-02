@@ -16,10 +16,8 @@ ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
 ENV LUAJIT_INC=/usr/include/luajit-2.1
 ENV VERBOSE=1
 
-# 下载 nginx-quic 源码并打补丁
-RUN hg clone -b quic https://hg.nginx.org/nginx-quic && \
-    cd nginx-quic && \
-    curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.0.10-log_escape_non_ascii.patch | patch -p1
+# 下载 nginx-quic 源码
+RUN hg clone -b quic https://hg.nginx.org/nginx-quic
 
 # 编译 nginx-quic
 RUN cd nginx-quic && \
@@ -70,8 +68,8 @@ RUN cd nginx-quic && \
 FROM nginx
 
 # 安装运行所需的软件包和 Lua 模块
-RUN apt-get update --fix-missing && apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks && \
-    luarocks install lua-sqlite3 && luarocks install lua-resty-lrucache && \
+RUN apt-get update --fix-missing && apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks lua-cjson&& \
+    luarocks install lua-sqlite3 lua-resty-lrucache && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段中复制生成的二进制文件
