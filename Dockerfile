@@ -13,12 +13,13 @@ RUN git -c http.sslVerify=false clone https://github.com/openresty/lua-nginx-mod
     git -c http.sslVerify=false clone https://github.com/openresty/lua-resty-core 
 
 # 下载 nginx-quic 源码并打补丁
-RUN hg clone -b quic https://hg.nginx.org/nginx-quic
-#    cd nginx-quic && \
-#    curl https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.0.10-log_escape_non_ascii.patch | patch -p1
+RUN hg clone -b quic https://hg.nginx.org/nginx-quic && \
+    cd nginx-quic && \
+    curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.0.10-log_escape_non_ascii.patch | patch -p1
 
 # 编译 nginx-quic
 RUN cd nginx-quic && \
+    export VERBOSE=1 && \
     auto/configure \
       --sbin-path=/usr/sbin/nginx \
       --modules-path=/usr/lib/nginx/modules \
