@@ -5,7 +5,7 @@ WORKDIR /src
 
 # 安装编译所需的软件包
 RUN apt-get update && apt-get install -y git gcc make autoconf libtool perl libssl-dev \
-    mercurial libperl-dev libpcre3-dev zlib1g-dev libxslt1-dev libgd-ocaml-dev libgeoip-dev luajit libluajit-5.1-dev libmaxminddb-dev
+    mercurial libperl-dev libpcre3-dev zlib1g-dev libxslt1-dev libgd-ocaml-dev luajit libluajit-5.1-dev libmaxminddb-dev
 
 # 下载并安装 Lua 模块和 ngx-devel-kit、ngx_http_geoip2_module
 RUN git -c http.sslVerify=false clone https://github.com/openresty/lua-nginx-module && \
@@ -55,7 +55,6 @@ RUN cd nginx-quic && \
       --with-http_sub_module \
       --with-http_image_filter_module \
       --with-http_v2_module \
-      --with-http_geoip_module \
       --with-ipv6 \
       --with-mail --with-mail_ssl_module \
       --with-stream --with-stream_realip_module \
@@ -72,12 +71,12 @@ RUN cd nginx-quic && \
 FROM nginx
 
 # 安装运行所需的软件包和 Lua 模块
-RUN apt-get update --fix-missing
-RUN apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks
-RUN luarocks install lua-sqlite3
-RUN luarocks install lua-resty-lrucache
-RUN luarocks install lua-cjson
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update --fix-missing && \
+    apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks && \
+    luarocks install lua-sqlite3 && \
+    luarocks install lua-resty-lrucache && \
+    luarocks install lua-cjson && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段中复制生成的二进制文件
 COPY --from=build /src/nginx-quic/objs/nginx /usr/sbin
