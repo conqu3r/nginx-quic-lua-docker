@@ -7,10 +7,11 @@ WORKDIR /src
 RUN apt-get update && apt-get install -y git gcc make autoconf libtool perl libssl-dev \
     mercurial libperl-dev libpcre3-dev zlib1g-dev libxslt1-dev libgd-ocaml-dev libgeoip-dev luajit libluajit-5.1-dev libmaxminddb-dev
 
-# 下载并安装 Lua 模块和 ngx-devel-kit
+# 下载并安装 Lua 模块和 ngx-devel-kit、ngx_http_geoip2_module
 RUN git -c http.sslVerify=false clone https://github.com/openresty/lua-nginx-module && \
     git -c http.sslVerify=false clone https://github.com/vision5/ngx_devel_kit && \
-    git -c http.sslVerify=false clone https://github.com/openresty/lua-resty-core 
+    git -c http.sslVerify=false clone https://github.com/openresty/lua-resty-core && \
+    git -c http.sslVerify=false clone https://github.com/leev/ngx_http_geoip2_module
 
 ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
 ENV LUAJIT_INC=/usr/include/luajit-2.1
@@ -54,7 +55,7 @@ RUN cd nginx-quic && \
       --with-http_sub_module \
       --with-http_image_filter_module \
       --with-http_v2_module \
-      --with-http_geoip2_module \
+      --with-http_geoip_module \
       --with-ipv6 \
       --with-mail --with-mail_ssl_module \
       --with-stream --with-stream_realip_module \
@@ -62,6 +63,7 @@ RUN cd nginx-quic && \
       --with-http_v3_module --with-stream_quic_module \
       --add-module=../ngx_devel_kit \
       --add-module=../lua-nginx-module \
+      --add-module=../ngx_http_geoip2_module \
       --with-debug --build=nginx-quic \
       --with-cc-opt="-Wno-error" && \
     make
