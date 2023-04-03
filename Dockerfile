@@ -72,7 +72,7 @@ FROM nginx
 
 # 安装运行所需的软件包和 Lua 模块
 RUN apt-get update --fix-missing && \
-    apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks && \
+    apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks libmaxminddb0 && \
     luarocks install lua-sqlite3 && \
     luarocks install lua-resty-lrucache && \
     luarocks install lua-cjson && \
