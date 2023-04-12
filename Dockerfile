@@ -84,6 +84,9 @@ COPY --from=build /src/nginx-quic/objs/nginx /usr/sbin
 # 从构建阶段中复制 Lua 模块
 COPY --from=build /src/lua-resty-core/lib /usr/local/share/lua/5.1
 
+# 修改时区
+ENV "TZ=Asia/Shanghai";
+
 # 复制 nginx 配置文件
 #COPY nginx.conf /etc/nginx/nginx.conf
 
