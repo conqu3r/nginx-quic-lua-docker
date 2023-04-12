@@ -8,10 +8,10 @@ RUN apt-get update && apt-get install -y git gcc make autoconf libtool perl libs
     mercurial libperl-dev libpcre3-dev zlib1g-dev libxslt1-dev libgd-ocaml-dev luajit libluajit-5.1-dev libmaxminddb-dev
 
 # 下载并安装 Lua 模块和 ngx-devel-kit、ngx_http_geoip2_module
-RUN git -c clone https://github.com/openresty/lua-nginx-module && \
-    git -c clone https://github.com/vision5/ngx_devel_kit && \
-    git -c clone https://github.com/openresty/lua-resty-core && \
-    git -c clone https://github.com/leev/ngx_http_geoip2_module
+RUN git clone https://github.com/openresty/lua-nginx-module && \
+    git clone https://github.com/vision5/ngx_devel_kit && \
+    git clone https://github.com/openresty/lua-resty-core && \
+    git clone https://github.com/leev/ngx_http_geoip2_module
 
 ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
 ENV LUAJIT_INC=/usr/include/luajit-2.1
