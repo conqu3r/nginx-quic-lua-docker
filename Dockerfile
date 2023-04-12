@@ -20,6 +20,10 @@ ENV VERBOSE=1
 # 下载 nginx-quic 源码
 RUN hg clone -b quic https://hg.nginx.org/nginx-quic
 
+# 打补丁
+RUN cd nginx-quic && \
+    curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 
+
 # 编译 nginx-quic
 RUN cd nginx-quic && \
     auto/configure \
