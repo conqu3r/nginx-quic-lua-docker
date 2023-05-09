@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y git gcc make autoconf libtool perl libs
 RUN git clone https://github.com/openresty/lua-nginx-module && \
     git clone https://github.com/vision5/ngx_devel_kit && \
     git clone https://github.com/openresty/lua-resty-core && \
-    git clone https://github.com/leev/ngx_http_geoip2_module
+    git clone https://github.com/leev/ngx_http_geoip2_module && \
+    git clone https://github.com/chobits/ngx_http_proxy_connect_module.git
 
 ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
 ENV LUAJIT_INC=/usr/include/luajit-2.1
@@ -20,9 +21,10 @@ ENV VERBOSE=1
 # 下载 nginx-quic 源码
 RUN hg clone -b quic https://hg.nginx.org/nginx-quic
 
-# 打补丁
+# 打补丁:1、解决日志中文编码；2、新增https正向代理；
 RUN cd nginx-quic && \
-    curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 
+    curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 && \
+    patch -p1 < /ngx_http_proxy_connect_module/patch/proxy_connect_rewrite_102101.patch
 
 # 编译 nginx-quic
 RUN cd nginx-quic && \
@@ -64,9 +66,10 @@ RUN cd nginx-quic && \
       --with-stream --with-stream_realip_module \
       --with-stream_ssl_module --with-stream_ssl_preread_module \
       --with-http_v3_module --with-stream_quic_module \
-      --add-module=../ngx_devel_kit \
-      --add-module=../lua-nginx-module \
-      --add-module=../ngx_http_geoip2_module \
+      --add-module=/ngx_devel_kit \
+      --add-module=/lua-nginx-module \
+      --add-module=/ngx_http_geoip2_module \
+      --add-module=/ngx_http_proxy_connect_module \
       --with-debug --build=nginx-quic \
       --with-cc-opt="-Wno-error" && \
     make
