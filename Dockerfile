@@ -66,10 +66,10 @@ RUN cd nginx-quic && \
       --with-stream --with-stream_realip_module \
       --with-stream_ssl_module --with-stream_ssl_preread_module \
       --with-http_v3_module --with-stream_quic_module \
-      --add-module=/ngx_devel_kit \
-      --add-module=/lua-nginx-module \
-      --add-module=/ngx_http_geoip2_module \
-      --add-module=/ngx_http_proxy_connect_module \
+      --add-module=../ngx_devel_kit \
+      --add-module=../lua-nginx-module \
+      --add-module=../ngx_http_geoip2_module \
+      --add-module=../ngx_http_proxy_connect_module \
       --with-debug --build=nginx-quic \
       --with-cc-opt="-Wno-error" && \
     make
