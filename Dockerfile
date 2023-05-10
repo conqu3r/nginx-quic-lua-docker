@@ -24,7 +24,7 @@ RUN hg clone -b quic https://hg.nginx.org/nginx-quic
 # 打补丁:1、解决日志中文编码；2、新增https正向代理；
 RUN cd nginx-quic && \
     curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 && \
-    patch -p1 < /ngx_http_proxy_connect_module/patch/proxy_connect_rewrite_102101.patch
+    patch -p1 < ../ngx_http_proxy_connect_module/patch/proxy_connect_rewrite_102101.patch
 
 # 编译 nginx-quic
 RUN cd nginx-quic && \
