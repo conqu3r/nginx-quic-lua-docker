@@ -17,11 +17,9 @@ ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
 ENV LUAJIT_INC=/usr/include/luajit-2.1
 ENV VERBOSE=1
 
-# 下载 nginx 最新源码
-RUN hg clone https://hg.nginx.org/nginx
-
-# 打补丁:1、解决日志中文编码；2、新增https正向代理；
-RUN cd nginx-quic && \
+# 下载 nginx 最新源码 并打补丁:解决日志中文编码
+RUN hg clone https://hg.nginx.org/nginx && \
+    cd nginx && \
     curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 
 
 # 编译 nginx
