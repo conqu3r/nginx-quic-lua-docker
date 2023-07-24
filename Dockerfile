@@ -79,7 +79,7 @@ RUN apt-get update --fix-missing && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段中复制生成的二进制文件
-COPY --from=build /src/nginx-quic/objs/nginx /usr/sbin
+COPY --from=build /src/nginx/objs/nginx /usr/sbin
 
 # 从构建阶段中复制 Lua 模块
 COPY --from=build /src/lua-resty-core/lib /usr/local/share/lua/5.1
