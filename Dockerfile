@@ -17,14 +17,12 @@ ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
 ENV LUAJIT_INC=/usr/include/luajit-2.1
 ENV VERBOSE=1
 
-# 下载 nginx 最新源码 并打补丁:解决日志中文编码
-RUN hg clone https://hg.nginx.org/nginx && \
-    cd nginx && \
+# 下载 nginx 源码 并打补丁:解决日志中文编码
+RUN wget https://nginx.org/download/nginx-1.25.1.tar.gz && tar -zxf nginx-1.25.1.tar.gz && cd nginx-1.25.1 && \
     curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 
 
 # 编译 nginx
-RUN cd nginx && \
-    auto/configure \
+RUN auto/configure \
       --sbin-path=/usr/sbin/nginx \
       --modules-path=/usr/lib/nginx/modules \
       --conf-path=/etc/nginx/nginx.conf \
@@ -61,7 +59,7 @@ RUN cd nginx && \
       --with-mail --with-mail_ssl_module \
       --with-stream --with-stream_realip_module \
       --with-stream_ssl_module --with-stream_ssl_preread_module \
-      --with-http_v3_module --with-stream_quic_module \
+      --with-http_v3_module \
       --add-module=../ngx_devel_kit \
       --add-module=../lua-nginx-module \
       --add-module=../ngx_http_geoip2_module \
