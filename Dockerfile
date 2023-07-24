@@ -4,7 +4,7 @@ FROM nginx AS build
 WORKDIR /src
 
 # 安装编译所需的软件包
-RUN apt-get update && apt-get install -y git gcc make autoconf libtool perl libssl-dev \
+RUN apt-get update && apt-get install -y wget git gcc make autoconf libtool perl libssl-dev \
     mercurial libperl-dev libpcre3-dev zlib1g-dev libxslt1-dev libgd-ocaml-dev luajit libluajit-5.1-dev libmaxminddb-dev
 
 # 下载并安装 Lua 模块和 ngx-devel-kit、ngx_http_geoip2_module
@@ -18,7 +18,7 @@ ENV LUAJIT_INC=/usr/include/luajit-2.1
 ENV VERBOSE=1
 
 # 下载 nginx 源码
-RUN wget https://nginx.org/download/nginx-1.25.1.tar.gz && tar -zxf nginx-1.25.1.tar.gz && cd nginx-1.25.1
+RUN git clone --branch release-1.25.1 https://github.com/nginx/nginx.git && cd nginx
    #  打补丁:解决日志中文编码
    #  curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 
 
@@ -64,7 +64,7 @@ RUN auto/configure \
       --add-module=../ngx_devel_kit \
       --add-module=../lua-nginx-module \
       --add-module=../ngx_http_geoip2_module \
-      --with-debug --build=nginx-quic \
+      --with-debug \
       --with-cc-opt="-Wno-error" && \
     make
 
