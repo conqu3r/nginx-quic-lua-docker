@@ -17,13 +17,12 @@ ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
 ENV LUAJIT_INC=/usr/include/luajit-2.1
 ENV VERBOSE=1
 
-# 下载 nginx 源码
-RUN git clone --branch release-1.25.1 https://github.com/nginx/nginx.git && cd nginx
-   #  打补丁:解决日志中文编码
-   #  curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 
+# 下载 nginx 源码 打补丁:解决日志中文编码
+RUN git clone --branch release-1.25.1 https://github.com/nginx/nginx.git && \
+    cd nginx && curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 
 
 # 编译 nginx
-RUN auto/configure \
+RUN cd nginx && auto/configure \
       --sbin-path=/usr/sbin/nginx \
       --modules-path=/usr/lib/nginx/modules \
       --conf-path=/etc/nginx/nginx.conf \
