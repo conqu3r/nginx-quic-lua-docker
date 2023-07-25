@@ -71,7 +71,9 @@ RUN cd nginx && auto/configure \
 FROM alpine
 
 # 安装运行所需的软件包和 Lua 模块
-RUN apk add --no-cache luajit sqlite sqlite-dev luarocks libmaxminddb && \
+RUN apk add --no-cache luajit sqlite sqlite-dev curl unzip make gcc musl-dev libmaxminddb && \
+    curl -L https://luarocks.github.io/luarocks/releases/luarocks-3.9.2.tar.gz | tar zx && \
+    cd luarocks-3.9.2 && ./configure && make install && \
     luarocks install lua-sqlite3 && \
     luarocks install lua-resty-lrucache && \
     luarocks install lua-cjson
