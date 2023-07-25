@@ -1,11 +1,11 @@
 # 构建阶段
-FROM alpine AS build
+FROM nginx AS build
 
 WORKDIR /src
 
 # 安装编译所需的软件包
-RUN apk add --no-cache git gcc make autoconf libtool perl openssl-dev pcre-dev zlib-dev libxslt-dev gd-dev luajit-dev \
-    curl patch mercurial perl-dev
+RUN apt-get update && apt-get install -y git gcc make autoconf libtool perl libssl-dev \
+    mercurial libperl-dev libpcre3-dev zlib1g-dev libxslt1-dev libgd-ocaml-dev luajit libluajit-5.1-dev libmaxminddb-dev
 
 # 下载并安装 Lua 模块和 ngx-devel-kit、ngx_http_geoip2_module
 RUN git clone https://github.com/openresty/lua-nginx-module && \
@@ -17,7 +17,7 @@ RUN git clone https://github.com/openresty/lua-nginx-module && \
     # 源码打补丁:解决日志中文编码
     cd nginx && curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 
 
-ENV LUAJIT_LIB=/usr/lib
+ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
 ENV LUAJIT_INC=/usr/include/luajit-2.1
 ENV VERBOSE=1
 
@@ -32,10 +32,10 @@ RUN cd nginx && auto/configure \
       --lock-path=/var/run/nginx.lock \
       --http-client-body-temp-path=/var/cache/nginx/client_temp \
       --http-proxy-temp-path=/var/cache/nginx/proxy_temp \
-      --http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \
+      --http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \ 
       --http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp \
       --http-scgi-temp-path=/var/cache/nginx/scgi_temp \
-      --user=nobody \
+      --user=root \
       --with-compat \
       --with-file-aio \
       --with-threads \
@@ -65,21 +65,21 @@ RUN cd nginx && auto/configure \
       --add-module=../ngx_http_geoip2_module \
       --with-debug \
       --with-cc-opt="-Wno-error" && \
-    make && make install
+    make
 
 # 最终阶段
-FROM alpine
+FROM nginx
 
 # 安装运行所需的软件包和 Lua 模块
-RUN apk add --no-cache luajit sqlite sqlite-dev curl unzip make gcc musl-dev libmaxminddb && \
-    curl -L https://luarocks.github.io/luarocks/releases/luarocks-3.9.2.tar.gz | tar zx && \
-    cd luarocks-3.9.2 && ./configure && make install && \
+RUN apt-get update --fix-missing && \
+    apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks libmaxminddb0 && \
     luarocks install lua-sqlite3 && \
     luarocks install lua-resty-lrucache && \
-    luarocks install lua-cjson
+    luarocks install lua-cjson && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段中复制生成的二进制文件
-COPY --from=build /usr/sbin/nginx /usr/sbin
+COPY --from=build /src/nginx/objs/nginx /usr/sbin
 
 # 从构建阶段中复制 Lua 模块
 COPY --from=build /src/lua-resty-core/lib /usr/local/share/lua/5.1
