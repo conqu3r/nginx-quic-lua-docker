@@ -1,97 +1,122 @@
-# 构建阶段
-FROM nginx AS build
+#
+# NOTE: THIS DOCKERFILE IS GENERATED VIA "update.sh"
+#
+# PLEASE DO NOT EDIT IT DIRECTLY.
+#
+FROM alpine:3.17
 
-WORKDIR /src
+LABEL maintainer="NGINX Docker Maintainers <docker-maint@nginx.com>"
 
-# 安装编译所需的软件包
-RUN apt-get update && apt-get install -y git gcc make autoconf libtool perl libssl-dev \
-    mercurial libperl-dev libpcre3-dev zlib1g-dev libxslt1-dev libgd-ocaml-dev luajit libluajit-5.1-dev libmaxminddb-dev
+ENV NGINX_VERSION 1.25.1
+ENV PKG_RELEASE   1
 
-# 下载并安装 Lua 模块和 ngx-devel-kit、ngx_http_geoip2_module
-RUN git clone https://github.com/openresty/lua-nginx-module && \
-    git clone https://github.com/vision5/ngx_devel_kit && \
-    git clone https://github.com/openresty/lua-resty-core && \
-    git clone https://github.com/leev/ngx_http_geoip2_module && \
-    # 下载 nginx 
-    git clone --branch release-1.25.1 https://github.com/nginx/nginx.git && \
-    # 源码打补丁:解决日志中文编码
-    cd nginx && curl -s https://raw.githubusercontent.com/openresty/openresty/master/patches/nginx-1.23.0-log_escape_non_ascii.patch | patch -p1 
+RUN set -x \
+# create nginx user/group first, to be consistent throughout docker variants
+    && addgroup -g 101 -S nginx \
+    && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
+    && apkArch="$(cat /etc/apk/arch)" \
+    && nginxPackages=" \
+        nginx=${NGINX_VERSION}-r${PKG_RELEASE} \
+    " \
+# install prerequisites for public key and pkg-oss checks
+    && apk add --no-cache --virtual .checksum-deps \
+        openssl \
+    && case "$apkArch" in \
+        x86_64|aarch64) \
+# arches officially built by upstream
+            set -x \
+            && KEY_SHA512="e09fa32f0a0eab2b879ccbbc4d0e4fb9751486eedda75e35fac65802cc9faa266425edf83e261137a2f4d16281ce2c1a5f4502930fe75154723da014214f0655" \
+            && wget -O /tmp/nginx_signing.rsa.pub https://nginx.org/keys/nginx_signing.rsa.pub \
+            && if echo "$KEY_SHA512 */tmp/nginx_signing.rsa.pub" | sha512sum -c -; then \
+                echo "key verification succeeded!"; \
+                mv /tmp/nginx_signing.rsa.pub /etc/apk/keys/; \
+            else \
+                echo "key verification failed!"; \
+                exit 1; \
+            fi \
+            && apk add -X "https://nginx.org/packages/mainline/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" --no-cache $nginxPackages \
+            ;; \
+        *) \
+# we're on an architecture upstream doesn't officially build for
+# let's build binaries from the published packaging sources
+            set -x \
+            && tempDir="$(mktemp -d)" \
+            && chown nobody:nobody $tempDir \
+            && apk add --no-cache --virtual .build-deps \
+                gcc \
+                libc-dev \
+                make \
+                openssl-dev \
+                pcre2-dev \
+                zlib-dev \
+                linux-headers \
+                bash \
+                alpine-sdk \
+                findutils \
+            && su nobody -s /bin/sh -c " \
+                export HOME=${tempDir} \
+                && cd ${tempDir} \
+                && curl -f -O https://hg.nginx.org/pkg-oss/archive/${NGINX_VERSION}-${PKG_RELEASE}.tar.gz \
+                && PKGOSSCHECKSUM=\"dd08a5c2b441817d58ffc91ade0d927a21bc9854c768391e92a005997a2961bcda64ca6a5cfce98d5394ac2787c8f4839b150f206835a8a7db944625651f9fd8 *${NGINX_VERSION}-${PKG_RELEASE}.tar.gz\" \
+                && if [ \"\$(openssl sha512 -r ${NGINX_VERSION}-${PKG_RELEASE}.tar.gz)\" = \"\$PKGOSSCHECKSUM\" ]; then \
+                    echo \"pkg-oss tarball checksum verification succeeded!\"; \
+                else \
+                    echo \"pkg-oss tarball checksum verification failed!\"; \
+                    exit 1; \
+                fi \
+                && tar xzvf ${NGINX_VERSION}-${PKG_RELEASE}.tar.gz \
+                && cd pkg-oss-${NGINX_VERSION}-${PKG_RELEASE} \
+                && cd alpine \
+                && make base \
+                && apk index -o ${tempDir}/packages/alpine/${apkArch}/APKINDEX.tar.gz ${tempDir}/packages/alpine/${apkArch}/*.apk \
+                && abuild-sign -k ${tempDir}/.abuild/abuild-key.rsa ${tempDir}/packages/alpine/${apkArch}/APKINDEX.tar.gz \
+                " \
+            && cp ${tempDir}/.abuild/abuild-key.rsa.pub /etc/apk/keys/ \
+            && apk del --no-network .build-deps \
+            && apk add -X ${tempDir}/packages/alpine/ --no-cache $nginxPackages \
+            ;; \
+    esac \
+# remove checksum deps
+    && apk del --no-network .checksum-deps \
+# if we have leftovers from building, let's purge them (including extra, unnecessary build deps)
+    && if [ -n "$tempDir" ]; then rm -rf "$tempDir"; fi \
+    && if [ -n "/etc/apk/keys/abuild-key.rsa.pub" ]; then rm -f /etc/apk/keys/abuild-key.rsa.pub; fi \
+    && if [ -n "/etc/apk/keys/nginx_signing.rsa.pub" ]; then rm -f /etc/apk/keys/nginx_signing.rsa.pub; fi \
+# Bring in gettext so we can get `envsubst`, then throw
+# the rest away. To do this, we need to install `gettext`
+# then move `envsubst` out of the way so `gettext` can
+# be deleted completely, then move `envsubst` back.
+    && apk add --no-cache --virtual .gettext gettext \
+    && mv /usr/bin/envsubst /tmp/ \
+    \
+    && runDeps="$( \
+        scanelf --needed --nobanner /tmp/envsubst \
+            | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
+            | sort -u \
+            | xargs -r apk info --installed \
+            | sort -u \
+    )" \
+    && apk add --no-cache $runDeps \
+    && apk del --no-network .gettext \
+    && mv /tmp/envsubst /usr/local/bin/ \
+# Bring in tzdata so users could set the timezones through the environment
+# variables
+    && apk add --no-cache tzdata \
+# forward request and error logs to docker log collector
+    && ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log \
+# create a docker-entrypoint.d directory
+    && mkdir /docker-entrypoint.d
 
-ENV LUAJIT_LIB=/usr/lib/x86_64-linux-gnu
-ENV LUAJIT_INC=/usr/include/luajit-2.1
-ENV VERBOSE=1
+COPY docker-entrypoint.sh /
+COPY 10-listen-on-ipv6-by-default.sh /docker-entrypoint.d
+COPY 15-local-resolvers.envsh /docker-entrypoint.d
+COPY 20-envsubst-on-templates.sh /docker-entrypoint.d
+COPY 30-tune-worker-processes.sh /docker-entrypoint.d
+ENTRYPOINT ["/docker-entrypoint.sh"]
 
-# 编译 nginx
-RUN cd nginx && auto/configure \
-      --sbin-path=/usr/sbin/nginx \
-      --modules-path=/usr/lib/nginx/modules \
-      --conf-path=/etc/nginx/nginx.conf \
-      --error-log-path=/var/log/nginx/error.log \
-      --http-log-path=/var/log/nginx/access.log \
-      --pid-path=/var/run/nginx.pid \
-      --lock-path=/var/run/nginx.lock \
-      --http-client-body-temp-path=/var/cache/nginx/client_temp \
-      --http-proxy-temp-path=/var/cache/nginx/proxy_temp \
-      --http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \ 
-      --http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp \
-      --http-scgi-temp-path=/var/cache/nginx/scgi_temp \
-      --user=root \
-      --with-compat \
-      --with-file-aio \
-      --with-threads \
-      --with-http_addition_module \
-      --with-http_auth_request_module \
-      --with-http_dav_module \
-      --with-http_flv_module \
-      --with-http_gunzip_module \
-      --with-http_gzip_static_module \
-      --with-http_mp4_module \
-      --with-http_random_index_module \
-      --with-http_realip_module \
-      --with-http_secure_link_module \
-      --with-http_slice_module \
-      --with-http_ssl_module \
-      --with-http_stub_status_module \
-      --with-http_sub_module \
-      --with-http_image_filter_module \
-      --with-http_v2_module \
-      --with-ipv6 \
-      --with-mail --with-mail_ssl_module \
-      --with-stream --with-stream_realip_module \
-      --with-stream_ssl_module --with-stream_ssl_preread_module \
-      --with-http_v3_module \
-      --add-module=../ngx_devel_kit \
-      --add-module=../lua-nginx-module \
-      --add-module=../ngx_http_geoip2_module \
-      --with-debug \
-      --with-cc-opt="-Wno-error" && \
-    make
+EXPOSE 80
 
-# 最终阶段
-FROM nginx
-
-# 安装运行所需的软件包和 Lua 模块
-RUN apt-get update --fix-missing && \
-    apt-get install -y libluajit-5.1-2 sqlite3 libsqlite3-dev luarocks libmaxminddb0 && \
-    luarocks install lua-sqlite3 && \
-    luarocks install lua-resty-lrucache && \
-    luarocks install lua-cjson && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# 从构建阶段中复制生成的二进制文件
-COPY --from=build /src/nginx/objs/nginx /usr/sbin
-
-# 从构建阶段中复制 Lua 模块
-COPY --from=build /src/lua-resty-core/lib /usr/local/share/lua/5.1
-
-# 修改时区
-ENV TZ=Asia/Shanghai
-
-# 复制 nginx 配置文件
-#COPY nginx.conf /etc/nginx/nginx.conf
-
-# 设置启动命令
-CMD ["nginx", "-g", "daemon off;"]
-
-# 设置信号
 STOPSIGNAL SIGQUIT
+
+CMD ["nginx", "-g", "daemon off;"]
