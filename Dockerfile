@@ -1,17 +1,18 @@
-FROM nginx:mainline-alpine as builder
+ARG NGINX_FROM_IMAGE=nginx:mainline-alpine
+FROM ${NGINX_FROM_IMAGE} as builder
 
 ARG ENABLED_MODULES
 
-RUN set -ex \
-    && if [ "$ENABLED_MODULES" = "" ]; then \
+SHELL ["/bin/ash", "-exo", "pipefail", "-c"]
+
+RUN if [ "$ENABLED_MODULES" = "" ]; then \
         echo "No additional modules enabled, exiting"; \
         exit 1; \
     fi
 
 COPY ./ /modules/
 
-RUN set -ex \
-    && apk update \
+RUN apk update \
     && apk add linux-headers openssl-dev pcre2-dev zlib-dev openssl abuild \
                musl-dev libxslt libxml2-utils make mercurial gcc unzip git \
                xz g++ coreutils \
@@ -60,13 +61,9 @@ RUN set -ex \
     done \
     && echo "BUILT_MODULES=\"$BUILT_MODULES\"" > /tmp/packages/modules.env
 
-FROM nginx:mainline-alpine
-COPY --from=builder /tmp/packages /tmp/packages
-RUN set -ex \
-    && . /tmp/packages/modules.env \
+FROM ${NGINX_FROM_IMAGE}
+RUN --mount=type=bind,target=/tmp/packages/,source=/tmp/packages/,from=builder \
+    . /tmp/packages/modules.env \
     && for module in $BUILT_MODULES; do \
            apk add --no-cache --allow-untrusted /tmp/packages/nginx-module-${module}-${NGINX_VERSION}*.apk; \
-       done \
-    && rm -rf /tmp/packages
-
-    
+       done
