@@ -26,6 +26,6 @@ jobs:
         with:
           context: .
           build-args: |
-            ENABLED_MODULES=geoip2 lua njs
+            ENABLED_MODULES=geoip2 ndk lua njs brotli
           push: true
           tags: conqu3r/nginx:latest
