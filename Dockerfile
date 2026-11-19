@@ -2,6 +2,37 @@ ARG NGINX_FROM_IMAGE=nginx:1.31.9-alpine@sha256:90b6bd2aec278b16b98221d64deb1d6d
 FROM ${NGINX_FROM_IMAGE} AS base
 RUN apk upgrade --no-cache
 
+# Temporary BusyBox wget fix until Alpine ships a patched package.
+FROM base AS busybox-backport
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
+RUN mkdir /tmp/busybox-backport \
+    && if apk info -e "busybox=1.37.0-r31" > /dev/null; then \
+        apk add --no-cache alpine-sdk linux-headers openssl-dev perl utmps-dev utmps-static; \
+        aports_commit=c3ef5d10e6ef6528852c51f0564963e2f8c1be19; \
+        patch_file=wget-CVE-2025-60876.patch; \
+        patch_sha512=c0eb42640d4903c6aece020031e49147ff3feda174ac91234203b51eb6f07dee8770456cb9b77fc6fc6268f893f6d5e8a947d60427ad304f542bf64544e08d73; \
+        git init -q /aports; \
+        git -C /aports remote add origin https://github.com/alpinelinux/aports.git; \
+        git -C /aports sparse-checkout set main/busybox; \
+        git -C /aports -c protocol.version=2 fetch --filter=blob:none --depth=1 origin "$aports_commit"; \
+        git -C /aports checkout --detach "$aports_commit"; \
+        cd /aports/main/busybox; \
+        curl -fsSL --retry 3 -o "$patch_file" \
+            https://sources.debian.org/data/main/b/busybox/1%3A1.37.0-10.1/debian/patches/wget-disallow-control-chars-in-URLs-CVE-2025-60876.patch; \
+        printf '%s  %s\n' "$patch_sha512" "$patch_file" | sha512sum -c -; \
+        sed -i \
+            -e 's/^pkgrel=31$/pkgrel=32/' \
+            -e "/^source=\"/a\\\t$patch_file" \
+            -e "/  busybox-1[.]37[.]0[.]tar[.]bz2$/a\\\t$patch_sha512  $patch_file" APKBUILD; \
+        abuild-keygen -an; \
+        cp "$HOME"/.abuild/*.rsa.pub /etc/apk/keys/; \
+        apk update; \
+        JOBS=2 SETFATTR=true abuild -F -r -K -P /packages; \
+        cd "/packages/main/$(apk --print-arch)"; \
+        cp busybox-1.37.0-r32.apk busybox-binsh-1.37.0-r32.apk ssl_client-1.37.0-r32.apk \
+            "$HOME"/.abuild/*.rsa.pub /tmp/busybox-backport/; \
+    fi
+
 FROM base AS builder
 ARG ENABLED_MODULES="geoip2 ndk lua njs brotli"
 # Official nginx/docker-nginx mainline/alpine source checksum for pkg-oss 1.31.9-1.
@@ -64,5 +95,14 @@ RUN --mount=type=bind,from=builder,source=/tmp/packages,target=/tmp/packages \
         cp -R /etc/apk/keys /tmp/apk-keys; \
         cp /tmp/packages/abuild-key.rsa.pub /tmp/apk-keys/; \
         apk add --no-cache --keys-dir /tmp/apk-keys "$@"; \
+        rm -r /tmp/apk-keys; \
+    fi
+
+RUN --mount=type=bind,from=busybox-backport,source=/tmp/busybox-backport,target=/tmp/busybox-backport \
+    set -e; \
+    if [ -f /tmp/busybox-backport/busybox-1.37.0-r32.apk ]; then \
+        cp -R /etc/apk/keys /tmp/apk-keys; \
+        cp /tmp/busybox-backport/*.rsa.pub /tmp/apk-keys/; \
+        apk add --no-cache --keys-dir /tmp/apk-keys /tmp/busybox-backport/*.apk; \
         rm -r /tmp/apk-keys; \
     fi

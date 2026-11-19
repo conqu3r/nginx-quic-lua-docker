@@ -11,6 +11,8 @@ sh tests/smoke-test.sh nginx-quic-lua:local
 
 可通过 `--build-arg 'ENABLED_MODULES=ndk lua'` 选择额外构建的模块。修改基础镜像的 NGINX 版本时，同时更新 `Dockerfile` 中的基础镜像摘要和对应 `pkg-oss` 源码归档 SHA-512 校验和。njs 由官方基础镜像提供。
 
+Alpine BusyBox `1.37.0-r31` 使用 Debian 的 CVE-2025-60876 补丁重新打包，成品镜像安装经过签名验证的本地 APK。漏洞报告保留原始匹配项，Grype 可能仍按 BusyBox 上游版本标记这条记录。Alpine 发布带修复的版本后，更新基础镜像并移除临时回补步骤。[Debian 安全跟踪](https://security-tracker.debian.org/tracker/CVE-2025-60876) · [Alpine 安全跟踪](https://security.alpinelinux.org/vuln/CVE-2025-60876)
+
 ## GitHub Actions
 
 拉取请求、推送和定时任务都会构建并扫描镜像。定时任务每次重新构建，从 Alpine 仓库安装最新补丁。漏洞扫描报告可在对应运行的 Artifacts 中下载。镜像通过 HTTP/3 实测与漏洞检查后，才会执行适用的发布步骤。
