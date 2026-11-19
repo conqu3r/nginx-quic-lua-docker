@@ -1,69 +1,68 @@
-ARG NGINX_FROM_IMAGE=nginx:mainline-alpine
-FROM ${NGINX_FROM_IMAGE} as builder
+ARG NGINX_FROM_IMAGE=nginx:1.31.9-alpine@sha256:90b6bd2aec278b16b98221d64deb1d6d35d164567f507ab0716e6053878315aa
+FROM ${NGINX_FROM_IMAGE} AS base
+RUN apk upgrade --no-cache
 
-ARG ENABLED_MODULES
+FROM base AS builder
+ARG ENABLED_MODULES="geoip2 ndk lua njs brotli"
+# Official nginx/docker-nginx mainline/alpine source checksum for pkg-oss 1.31.9-1.
+ARG PKG_OSS_SHA512=220da8433bf53265cf51abeaa0b6fdd9b6c77d16ee75340cb7bfd6412513d4d0a5b82e38bdf24a0343956906ea43748eb9c8615e917f6488915c7d6b69ccb8c0
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
-SHELL ["/bin/ash", "-exo", "pipefail", "-c"]
+RUN apk add --no-cache \
+        abuild coreutils curl findutils g++ git libxml2-utils libxslt linux-headers \
+        make musl-dev openssl openssl-dev pcre2-dev unzip xz zlib-dev \
+    && printf '%s\n' '#!/bin/sh' 'SETFATTR=true exec /usr/bin/abuild -F "$@"' > /usr/local/bin/abuild \
+    && chmod +x /usr/local/bin/abuild
 
-RUN if [ "$ENABLED_MODULES" = "" ]; then \
-        echo "No additional modules enabled, exiting"; \
-        exit 1; \
+RUN curl --fail --silent --show-error --location --retry 3 \
+        "https://github.com/nginx/pkg-oss/archive/${NGINX_VERSION}-${PKG_RELEASE}.tar.gz" -o /tmp/pkg-oss.tar.gz \
+    && printf '%s  %s\n' "$PKG_OSS_SHA512" /tmp/pkg-oss.tar.gz | sha512sum -c - \
+    && mkdir -p /pkg-oss /tmp/packages \
+    && tar -xzf /tmp/pkg-oss.tar.gz -C /pkg-oss --strip-components=1 \
+    && rm /tmp/pkg-oss.tar.gz
+
+COPY . /modules/
+WORKDIR /pkg-oss/alpine
+
+RUN set -f; \
+    for module in $ENABLED_MODULES; do \
+        case "$module" in \
+            *[!a-zA-Z0-9_.-]*) echo "Invalid module name: $module" >&2; exit 1 ;; \
+        esac; \
+        if [ -d "/modules/$module" ]; then \
+            test -s "/modules/$module/source" || { echo "Missing source for $module" >&2; exit 1; }; \
+            if [ -s "/modules/$module/build-deps" ]; then \
+                apk add --no-cache $(cat "/modules/$module/build-deps"); \
+            fi; \
+            if [ -x "/modules/$module/prebuild" ]; then \
+                "/modules/$module/prebuild"; \
+            fi; \
+            /pkg-oss/build_module.sh -v "$NGINX_VERSION" -f -y -o /tmp/packages \
+                -n "$module" $(cat "/modules/$module/source"); \
+        elif apk info -e "nginx-module-$module" > /dev/null; then \
+            echo "Using nginx-module-$module from the base image"; \
+        elif make list | awk -v module="$module" '$1 == module { found = 1 } END { exit !found }'; then \
+            make "abuild-module-$module"; \
+            build_deps=$(. "./abuild-module-$module/APKBUILD"; printf '%s\n' "$makedepends"); \
+            apk add --no-cache $build_deps; \
+            make "module-$module"; \
+            find "$HOME/packages" -type f -name "nginx-module-$module-${NGINX_VERSION}*.apk" \
+                -exec mv {} /tmp/packages/ \;; \
+        else \
+            echo "Unknown NGINX module: $module" >&2; exit 1; \
+        fi; \
+    done; \
+    if [ -f "$HOME/.abuild/abuild-key.rsa.pub" ]; then \
+        cp "$HOME/.abuild/abuild-key.rsa.pub" /tmp/packages/; \
     fi
 
-COPY ./ /modules/
-
-RUN apk update \
-    && apk add linux-headers openssl-dev pcre2-dev zlib-dev openssl abuild \
-               musl-dev libxslt libxml2-utils make mercurial gcc unzip git \
-               xz g++ coreutils \
-    # allow abuild as a root user \
-    && printf "#!/bin/sh\\nSETFATTR=true /usr/bin/abuild -F \"\$@\"\\n" > /usr/local/bin/abuild \
-    && chmod +x /usr/local/bin/abuild \
-    && hg clone -r ${NGINX_VERSION}-${PKG_RELEASE} https://hg.nginx.org/pkg-oss/ \
-    && cd pkg-oss \
-    && mkdir /tmp/packages \
-    && for module in $ENABLED_MODULES; do \
-        echo "Building $module for nginx-$NGINX_VERSION"; \
-        if [ -d /modules/$module ]; then \
-            echo "Building $module from user-supplied sources"; \
-            # check if module sources file is there and not empty
-            if [ ! -s /modules/$module/source ]; then \
-                echo "No source file for $module in modules/$module/source, exiting"; \
-                exit 1; \
-            fi; \
-            # some modules require build dependencies
-            if [ -f /modules/$module/build-deps ]; then \
-                echo "Installing $module build dependencies"; \
-                apk update && apk add $(cat /modules/$module/build-deps | xargs); \
-            fi; \
-            # if a module has a build dependency that is not in a distro, provide a
-            # shell script to fetch/build/install those
-            # note that shared libraries produced as a result of this script will
-            # not be copied from the builder image to the main one so build static
-            if [ -x /modules/$module/prebuild ]; then \
-                echo "Running prebuild script for $module"; \
-                /modules/$module/prebuild; \
-            fi; \
-            /pkg-oss/build_module.sh -v $NGINX_VERSION -f -y -o /tmp/packages -n $module $(cat /modules/$module/source); \
-            BUILT_MODULES="$BUILT_MODULES $(echo $module | tr '[A-Z]' '[a-z]' | tr -d '[/_\-\.\t ]')"; \
-        elif make -C /pkg-oss/alpine list | grep -E "^$module\s+\d+" > /dev/null; then \
-            echo "Building $module from pkg-oss sources"; \
-            cd /pkg-oss/alpine; \
-            make abuild-module-$module BASE_VERSION=$NGINX_VERSION NGINX_VERSION=$NGINX_VERSION; \
-            apk add $(. ./abuild-module-$module/APKBUILD; echo $makedepends;); \
-            make module-$module BASE_VERSION=$NGINX_VERSION NGINX_VERSION=$NGINX_VERSION; \
-            find ~/packages -type f -name "*.apk" -exec mv -v {} /tmp/packages/ \;; \
-            BUILT_MODULES="$BUILT_MODULES $module"; \
-        else \
-            echo "Don't know how to build $module module, exiting"; \
-            exit 1; \
-        fi; \
-    done \
-    && echo "BUILT_MODULES=\"$BUILT_MODULES\"" > /tmp/packages/modules.env
-
-FROM ${NGINX_FROM_IMAGE}
-RUN --mount=type=bind,target=/tmp/packages/,source=/tmp/packages/,from=builder \
-    . /tmp/packages/modules.env \
-    && for module in $BUILT_MODULES; do \
-           apk add --no-cache --allow-untrusted /tmp/packages/nginx-module-${module}-${NGINX_VERSION}*.apk; \
-       done
+FROM base
+RUN --mount=type=bind,from=builder,source=/tmp/packages,target=/tmp/packages \
+    set -e; \
+    set -- /tmp/packages/nginx-module-*-${NGINX_VERSION}*.apk; \
+    if [ -f "$1" ]; then \
+        cp -R /etc/apk/keys /tmp/apk-keys; \
+        cp /tmp/packages/abuild-key.rsa.pub /tmp/apk-keys/; \
+        apk add --no-cache --keys-dir /tmp/apk-keys "$@"; \
+        rm -r /tmp/apk-keys; \
+    fi
